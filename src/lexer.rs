@@ -66,8 +66,8 @@ impl Lexer {
                         }
                     }
                     return match identifier.as_str() {
-                        "PRINT" => Some(Token::Print),
-                        "SET" => Some(Token::Set),
+                        "msg" => Some(Token::Print),
+                        "set" => Some(Token::Set),
                         _ => Some(Token::Identifier(identifier)),
                     };
                 }
