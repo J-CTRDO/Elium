@@ -49,4 +49,18 @@ mod tests {
         assert_eq!(lexer.next_token(), Ok(Token::Equals));
         assert_eq!(lexer.next_token(), Ok(Token::Number(42)));
     }
+    #[test]
+fn test_boolean_expression() {
+    let mut interpreter = Interpreter::new();
+    let stmts = vec![
+        Stmt::VariableDeclaration("x".to_string(), Expr::Literal(Value::Boolean(true))),
+        Stmt::If(
+            Expr::Variable("x".to_string()),
+            vec![Stmt::Print(Expr::Literal(Value::Text("Condition met".to_string())))],
+            Some(vec![Stmt::Print(Expr::Literal(Value::Text("Condition not met".to_string())))]),
+        ),
+    ];
+    interpreter.interpret(stmts).unwrap();
+}
+
 }

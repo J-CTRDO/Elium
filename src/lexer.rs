@@ -2,8 +2,7 @@
 pub enum Token {
     Identifier(String),
     Number(i64),
-    String(String),
-
+    Text(String), // 修正：String -> Text
     Plus,
     Minus,
     Multiply,
@@ -15,7 +14,6 @@ pub enum Token {
     RightBrace,
     Comma,
     Colon,
-
     Package,
     Import,
     From,
@@ -29,8 +27,6 @@ pub enum Token {
     Input,
     Get,
     Async,
-
-    Unknown(char),
 }
 
 pub struct Lexer {
@@ -70,44 +66,44 @@ impl Lexer {
         self.input.get(self.position).copied()
     }
 
-    pub fn next_token(&mut self) -> Result<Token, String> {
+    pub fn next_token(&mut self) -> Option<Result<Token, String>> {
         while let Some(ch) = self.next_char() {
             match ch {
                 ' ' | '\t' | '\r' | '\n' => continue,
-                '=' => return Ok(Token::Equals),
-                '+' => return Ok(Token::Plus),
-                '-' => return Ok(Token::Minus),
-                '*' => return Ok(Token::Multiply),
-                '(' => return Ok(Token::LeftParen),
-                ')' => return Ok(Token::RightParen),
-                '{' => return Ok(Token::LeftBrace),
-                '}' => return Ok(Token::RightBrace),
-                ',' => return Ok(Token::Comma),
-                ':' => return Ok(Token::Colon),
+                '=' => return Some(Ok(Token::Equals)),
+                '+' => return Some(Ok(Token::Plus)),
+                '-' => return Some(Ok(Token::Minus)),
+                '*' => return Some(Ok(Token::Multiply)),
+                '(' => return Some(Ok(Token::LeftParen)),
+                ')' => return Some(Ok(Token::RightParen)),
+                '{' => return Some(Ok(Token::LeftBrace)),
+                '}' => return Some(Ok(Token::RightBrace)),
+                ',' => return Some(Ok(Token::Comma)),
+                ':' => return Some(Ok(Token::Colon)),
                 '"' => {
-                    let mut string = String::new();
-                    while let Some(next) = self.peek_char() {
+                    let mut text = String::new();
+                    while let Some(next) = self.next_char() {
                         if next == '"' {
-                            self.next_char(); // Consume closing quote
                             break;
-                        } else {
-                            string.push(next);
-                            self.next_char();
                         }
+                        text.push(next);
                     }
-                    return Ok(Token::String(string));
+                    if self.peek_char().is_none() {
+                        return Some(Err("Unterminated string literal".to_string()));
+                    }
+                    return Some(Ok(Token::Text(text)));
                 }
-                c if c.is_digit(10) => {
+                c if c.is_ascii_digit() => {
                     let mut number = c.to_string();
                     while let Some(next) = self.peek_char() {
-                        if next.is_digit(10) {
+                        if next.is_ascii_digit() {
                             number.push(next);
                             self.next_char();
                         } else {
                             break;
                         }
                     }
-                    return Ok(Token::Number(number.parse().unwrap()));
+                    return Some(Ok(Token::Number(number.parse().unwrap())));
                 }
                 c if c.is_alphabetic() => {
                     let mut identifier = c.to_string();
@@ -119,7 +115,7 @@ impl Lexer {
                             break;
                         }
                     }
-                    return match identifier.as_str() {
+                    return Some(match identifier.as_str() {
                         "package" => Ok(Token::Package),
                         "import" => Ok(Token::Import),
                         "from" => Ok(Token::From),
@@ -134,11 +130,11 @@ impl Lexer {
                         "get" => Ok(Token::Get),
                         "async" => Ok(Token::Async),
                         _ => Ok(Token::Identifier(identifier)),
-                    };
+                    });
                 }
-                _ => return Ok(Token::Unknown(ch)),
+                _ => return Some(Err(format!("Unexpected character: {}", ch))),
             }
         }
-        Err("End of input".to_string())
+        None
     }
 }
