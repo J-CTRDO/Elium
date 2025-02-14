@@ -99,4 +99,27 @@ impl Parser {
             None => Err("Unexpected end of input".to_string()),
         }
     }
+    pub fn parse_function_call(&mut self) -> Result<ASTNode, String> {
+        if let Some(Token::Identifier(name)) = self.next_token() {
+            let mut args = Vec::new();
+            if let Some(Token::LeftParen) = self.next_token() {
+                while let Some(token) = self.peek_token() {
+                    if let Token::RightParen = token {
+                        self.next_token();
+                        break;
+                    } else {
+                        args.push(self.parse_expression()?);
+                        if let Some(Token::Comma) = self.peek_token() {
+                            self.next_token(); // カンマをスキップ
+                        }
+                    }
+                }
+                Ok(ASTNode::FunctionCall(name.clone(), args))
+            } else {
+                Err("Expected '(' after function name".to_string())
+            }
+        } else {
+            Err("Expected function name".to_string())
+        }
+    }    
 }

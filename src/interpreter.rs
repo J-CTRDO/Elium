@@ -1,4 +1,5 @@
 use crate::ast::{ASTNode, Expr};
+use crate::scope::Scope;
 use crate::utils::error::{Error, Result};
 use std::collections::HashMap;
 
@@ -7,6 +8,7 @@ pub enum Value {
     Number(i64),
     Text(String),
     Boolean(bool),
+    None, // 戻り値がない場合に対応
 }
 
 impl std::fmt::Display for Value {
@@ -15,21 +17,22 @@ impl std::fmt::Display for Value {
             Value::Number(n) => write!(f, "{}", n),
             Value::Text(s) => write!(f, "{}", s),
             Value::Boolean(b) => write!(f, "{}", b),
+            Value::None => write!(f, "None"),
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Interpreter {
-    variables: HashMap<String, Value>,  // 変数を保持
-    functions: HashMap<String, ASTNode>, // 関数を保持
+    scope: Scope, // スコープ管理
+    functions: HashMap<String, (Vec<String>, Vec<ASTNode>)>, // 関数名 -> (引数, 関数本体)
 }
 
 impl Interpreter {
     /// 新しいインタプリタを作成
     pub fn new() -> Self {
         Self {
-            variables: HashMap::new(),
+            scope: Scope::new(None), // グローバルスコープの初期化
             functions: HashMap::new(),
         }
     }
@@ -47,7 +50,7 @@ impl Interpreter {
         match stmt {
             ASTNode::Variable(name, expr) => {
                 let value = self.evaluate_expression(expr)?;
-                self.variables.insert(name.clone(), value);
+                self.scope.set(name.clone(), value); // スコープに変数を登録
             }
             ASTNode::Msg(message) => {
                 println!("{}", message);
@@ -59,11 +62,11 @@ impl Interpreter {
                     self.interpret(else_body.clone())?;
                 }
             }
-            ASTNode::Function(name, _params, body) => {
-                self.functions.insert(name.clone(), ASTNode::Function(name.clone(), _params.clone(), body.clone()));
+            ASTNode::Function(name, params, body) => {
+                self.functions.insert(name.clone(), (params.clone(), body.clone())); // 関数を登録
             }
             ASTNode::FunctionCall(name, args) => {
-                if let Some(ASTNode::Function(_name, params, body)) = self.functions.get(name) {
+                if let Some((params, body)) = self.functions.get(name) {
                     if params.len() != args.len() {
                         return Err(Error::Runtime(format!(
                             "Function {} expected {} arguments, but got {}",
@@ -72,15 +75,19 @@ impl Interpreter {
                             args.len()
                         )));
                     }
-                    let mut local_variables = HashMap::new();
+
+                    // 関数呼び出し用のローカルスコープを生成
+                    let mut local_scope = Scope::new(Some(self.scope.clone()));
                     for (param, arg) in params.iter().zip(args.iter()) {
-                        local_variables.insert(param.clone(), self.evaluate_expression(arg)?);
+                        let value = self.evaluate_expression(arg)?;
+                        local_scope.set(param.clone(), value);
                     }
-                    let mut sub_interpreter = Self {
-                        variables: local_variables,
-                        functions: self.functions.clone(),
-                    };
-                    sub_interpreter.interpret(body.clone())?;
+
+                    // 現在のスコープをローカルスコープに切り替えて実行
+                    let previous_scope = self.scope.clone();
+                    self.scope = local_scope;
+                    self.interpret(body.clone())?;
+                    self.scope = previous_scope; // 元のスコープに戻す
                 } else {
                     return Err(Error::Runtime(format!("Function {} not found", name)));
                 }
@@ -99,9 +106,8 @@ impl Interpreter {
         match expr {
             Expr::Literal(value) => Ok(value.clone()),
             Expr::Variable(name) => self
-                .variables
+                .scope
                 .get(name)
-                .cloned()
                 .ok_or_else(|| Error::Runtime(format!("Undefined variable: {}", name))),
             Expr::Binary(left, op, right) => {
                 let left_value = self.evaluate_expression(left)?;
