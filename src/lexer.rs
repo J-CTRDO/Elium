@@ -1,8 +1,12 @@
-#[derive(Debug, PartialEq)]
+// lexer.rs
+
+use crate::utils::error::{Error, Result};
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Token {
     Identifier(String),
     Number(i64),
-    Text(String), // 修正：String -> Text
+    Text(String),
     Plus,
     Minus,
     Multiply,
@@ -66,7 +70,7 @@ impl Lexer {
         self.input.get(self.position).copied()
     }
 
-    pub fn next_token(&mut self) -> Option<Result<Token, String>> {
+    pub fn next_token(&mut self) -> Option<Result<Token>> {
         while let Some(ch) = self.next_char() {
             match ch {
                 ' ' | '\t' | '\r' | '\n' => continue,
@@ -87,9 +91,6 @@ impl Lexer {
                             break;
                         }
                         text.push(next);
-                    }
-                    if self.peek_char().is_none() {
-                        return Some(Err("Unterminated string literal".to_string()));
                     }
                     return Some(Ok(Token::Text(text)));
                 }
@@ -132,7 +133,7 @@ impl Lexer {
                         _ => Ok(Token::Identifier(identifier)),
                     });
                 }
-                _ => return Some(Err(format!("Unexpected character: {}", ch))),
+                _ => return Some(Err(Error::Runtime(format!("Unexpected character: {}", ch)))),
             }
         }
         None

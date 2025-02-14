@@ -1,4 +1,5 @@
 // main.rs
+
 mod lexer;
 mod parser;
 mod ast;
@@ -9,14 +10,13 @@ mod utils;
 use lexer::Lexer;
 use parser::Parser;
 use interpreter::Interpreter;
-use ast::{ASTNode, Expr};
 use utils::error::{Error, Result};
 
 fn main() {
     let code = r#"
     package test
-    msg() "Hello World!"
-    exit:
+    msg "Hello World!"
+    exit
     "#;
 
     // トークナイザを初期化
@@ -24,7 +24,7 @@ fn main() {
     let mut tokens = Vec::new();
 
     // トークンをすべて取得
-    while let Ok(token) = lexer.next_token() {
+    while let Some(Ok(token)) = lexer.next_token() {
         tokens.push(token);
     }
 
@@ -37,12 +37,16 @@ fn main() {
             
             // インタプリタを使ってASTを実行
             let mut interpreter = Interpreter::new();
-            if let Err(err) = interpreter.interpret(ast) {
+            // パーサーが返すASTがProgramの場合、内部の文リストを取り出す
+            let stmts = match ast {
+                ast::ASTNode::Program(stmts) => stmts,
+                other => vec![other],
+            };
+            if let Err(err) = interpreter.interpret(stmts) {
                 eprintln!("Runtime error: {}", err);
             }
         },
         Err(e) => {
-            // パースエラーを出力
             eprintln!("Parse error: {}", e);
         },
     }
