@@ -1,9 +1,13 @@
-#[derive(Debug)]
+use crate::lexer::Token; // Tokenを正しくインポート
+use std::collections::HashMap; // HashMapを正しくインポート
+
+#[derive(Debug, Clone)]
 pub enum ASTNode {
     Program(Vec<ASTNode>),
     Package(String),
     Import(String, Option<String>),
     Msg(String),
+    Literal(Value),
     Variable(String, Box<ASTNode>),
     BinaryOp(Box<ASTNode>, Token, Box<ASTNode>),
     If(Box<ASTNode>, Vec<ASTNode>, Vec<ASTNode>),
@@ -27,5 +31,5 @@ pub enum Expr {
     Variable(String),
     Binary(Box<Expr>, String, Box<Expr>),
     Input(String),
-    FunctionCall(String, Vec<Expr>), // 関数呼び出し
+    FunctionCall(String, Vec<Expr>),
 }

@@ -1,6 +1,7 @@
-use crate::ast::{ASTNode, Expr};
+use crate::ast::{ASTNode, Expr, Value};
 use crate::scope::Scope;
 use crate::utils::error::{Error, Result};
+use crate::ast::Value;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
