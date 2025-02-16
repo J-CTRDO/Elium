@@ -1,4 +1,4 @@
-// lexer.rs
+// src/lexer.rs
 
 use crate::utils::error::{Error, Result};
 

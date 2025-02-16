@@ -1,6 +1,6 @@
-// parser.rs
+// src/parser.rs
 
-use crate::ast::{ASTNode, Value};
+use crate::ast::{ASTNode, Expr, Value};
 use crate::lexer::Token;
 use crate::utils::error::{Error, Result};
 
@@ -15,16 +15,19 @@ impl Parser {
         Self { tokens, position: 0 }
     }
 
-    fn next_token(&mut self) -> Option<&Token> {
-        let token = self.tokens.get(self.position);
-        if token.is_some() {
+    // 借用競合を防ぐため、peek_token()の結果は cloned() する
+    fn next_token(&mut self) -> Option<Token> {
+        if self.position < self.tokens.len() {
+            let token = self.tokens[self.position].clone();
             self.position += 1;
+            Some(token)
+        } else {
+            None
         }
-        token
     }
 
-    fn peek_token(&self) -> Option<&Token> {
-        self.tokens.get(self.position)
+    fn peek_token(&self) -> Option<Token> {
+        self.tokens.get(self.position).cloned()
     }
 
     pub fn parse(&mut self) -> Result<ASTNode> {
@@ -34,9 +37,8 @@ impl Parser {
             match token {
                 Token::Package => {
                     self.next_token();
-                    // 次に Identifier が来ると仮定
                     if let Some(Token::Identifier(name)) = self.next_token() {
-                        statements.push(ASTNode::Package(name.clone()));
+                        statements.push(ASTNode::Package(name));
                     } else {
                         return Err(Error::Syntax("Expected package name".into()));
                     }
@@ -44,7 +46,7 @@ impl Parser {
                 Token::Msg => {
                     self.next_token();
                     if let Some(Token::Text(msg)) = self.next_token() {
-                        statements.push(ASTNode::Msg(msg.clone()));
+                        statements.push(ASTNode::Msg(msg));
                     } else {
                         return Err(Error::Syntax("Expected message string".into()));
                     }
@@ -54,14 +56,26 @@ impl Parser {
                     statements.push(ASTNode::Exit);
                 }
                 Token::Identifier(name) => {
-                    // この例では、Identifier が関数呼び出しか変数かを判定
-                    self.next_token();
-                    if let Some(Token::LeftParen) = self.peek_token() {
-                        self.next_token(); // '(' を消費
-                        let args = self.parse_arguments()?;
-                        statements.push(ASTNode::FunctionCall(name.clone(), args));
+                    self.next_token(); // 消費する
+                    if let Some(tok) = self.peek_token() {
+                        match tok {
+                            Token::Equals => {
+                                self.next_token(); // '=' を消費
+                                let expr = self.parse_expression()?;
+                                // Variable は now (String, Box<Expr>) に変更している
+                                statements.push(ASTNode::Variable(name, Box::new(expr)));
+                            }
+                            Token::LeftParen => {
+                                self.next_token(); // '(' を消費
+                                let args = self.parse_arguments()?;
+                                statements.push(ASTNode::FunctionCall(name, args));
+                            }
+                            _ => {
+                                return Err(Error::Syntax("Expected '=' or '(' after identifier".into()));
+                            }
+                        }
                     } else {
-                        statements.push(ASTNode::Variable(name.clone()));
+                        return Err(Error::Syntax("Unexpected end of input after identifier".into()));
                     }
                 }
                 _ => return Err(Error::Syntax(format!("Unexpected token: {:?}", token))),
@@ -71,21 +85,41 @@ impl Parser {
         Ok(ASTNode::Program(statements))
     }
 
-    fn parse_arguments(&mut self) -> Result<Vec<ASTNode>> {
+    // 簡易的な式解析
+    fn parse_expression(&mut self) -> Result<Expr> {
+        if let Some(token) = self.peek_token() {
+            match token {
+                Token::Number(n) => {
+                    self.next_token();
+                    Ok(Expr::Literal(Value::Number(n)))
+                }
+                Token::Text(s) => {
+                    self.next_token();
+                    Ok(Expr::Literal(Value::Text(s)))
+                }
+                Token::Identifier(name) => {
+                    self.next_token();
+                    Ok(Expr::Variable(name))
+                }
+                _ => Err(Error::Syntax(format!("Unexpected token in expression: {:?}", token))),
+            }
+        } else {
+            Err(Error::Syntax("Unexpected end of input in expression".into()))
+        }
+    }
+
+    // parse_arguments() は Vec<Expr> を返す
+    fn parse_arguments(&mut self) -> Result<Vec<Expr>> {
         let mut args = Vec::new();
         while let Some(token) = self.peek_token() {
             match token {
                 Token::RightParen => {
-                    self.next_token(); // 消費する
+                    self.next_token(); // ')' を消費
                     break;
                 }
                 _ => {
-                    match self.next_token() {
-                        Some(Token::Text(s)) => args.push(ASTNode::Literal(Value::Text(s.clone()))),
-                        Some(Token::Number(n)) => args.push(ASTNode::Literal(Value::Number(*n))),
-                        Some(tok) => return Err(Error::Syntax(format!("Unexpected argument token: {:?}", tok))),
-                        None => break,
-                    }
+                    let expr = self.parse_expression()?;
+                    args.push(expr);
                     if let Some(Token::Comma) = self.peek_token() {
                         self.next_token(); // カンマを消費
                     }
