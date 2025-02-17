@@ -1,4 +1,4 @@
-// main.rs
+// src/main.rs
 
 mod lexer;
 mod parser;
@@ -14,40 +14,46 @@ use utils::error::{Error, Result};
 
 fn main() {
     let code = r#"
-    package test
+    package elium
+    Import from elium to os
     msg "Hello World!"
+    x = 1 + 2
+    name = input("What is your name?")
+    msg "Hello, {name}"
+    if(x == 3) {
+        msg "x is 3"
+    } else {
+        msg "x is not 3"
+    }
+    function (name=add, a, b) {
+        i = a + b
+        return i
+    }
+    result = add(5, 10)
     exit
     "#;
 
-    // トークナイザを初期化
     let mut lexer = Lexer::new(code);
     let mut tokens = Vec::new();
-
-    // トークンをすべて取得
     while let Some(Ok(token)) = lexer.next_token() {
         tokens.push(token);
     }
 
-    // パーサを初期化してASTに変換
     let mut parser = Parser::new(tokens);
     match parser.parse() {
         Ok(ast) => {
-            // ASTをデバッグ出力
             println!("{:#?}", ast);
-            
-            // インタプリタを使ってASTを実行
             let mut interpreter = Interpreter::new();
-            // パーサーが返すASTがProgramの場合、内部の文リストを取り出す
             let stmts = match ast {
-                ast::ASTNode::Program(stmts) => stmts,
+                ast::ASTNode::Program(s) => s,
                 other => vec![other],
             };
             if let Err(err) = interpreter.interpret(stmts) {
                 eprintln!("Runtime error: {}", err);
             }
-        },
+        }
         Err(e) => {
             eprintln!("Parse error: {}", e);
-        },
+        }
     }
 }

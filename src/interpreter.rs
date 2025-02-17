@@ -5,8 +5,6 @@ use crate::scope::Scope;
 use crate::utils::error::{Error, Result};
 use std::collections::HashMap;
 
-// ※ここでは ast::Value を使用するので、独自の Value 定義は削除
-
 impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -22,9 +20,9 @@ impl std::fmt::Display for Value {
 
 #[derive(Debug, Clone)]
 pub struct Interpreter {
-    // 現在のスコープ（変数管理）
+    // 変数や関数定義のためのスコープ
     pub scope: Scope,
-    // 関数定義: 関数名 → (引数リスト, 関数本体（文のリスト）)
+    // 関数定義：関数名 → (引数リスト, 関数本体の文リスト)
     pub functions: HashMap<String, (Vec<String>, Vec<ASTNode>)>,
 }
 
@@ -49,7 +47,7 @@ impl Interpreter {
     fn execute_statement(&mut self, stmt: &ASTNode) -> Result<()> {
         match stmt {
             ASTNode::Variable(name, expr_box) => {
-                // expr_box は Box<Expr> なので、*expr_box を &Expr に変換
+                // expr_box は Box<Expr> なので、*expr_box で解包
                 let value = self.evaluate_expression(&*expr_box)?;
                 self.scope.set(name.clone(), value);
             }
@@ -57,14 +55,13 @@ impl Interpreter {
                 println!("{}", message);
             }
             ASTNode::If(condition_node, then_body, else_body) => {
-                // 条件は ASTNode として格納されているので、仮に Literal または Variable として扱う
+                // 条件部分は、ASTNode::Literal または ASTNode::Variable として想定
                 let condition_expr = match &**condition_node {
                     ASTNode::Literal(val) => Expr::Literal(val.clone()),
                     ASTNode::Variable(name, _) => Expr::Variable(name.clone()),
                     _ => return Err(Error::Runtime("Unsupported condition expression".into())),
                 };
                 if let Value::Boolean(true) = self.evaluate_expression(&condition_expr)? {
-                    // then_body は Vec<ASTNode> なので、clone() して渡す
                     self.interpret(then_body.clone())?;
                 } else {
                     self.interpret(else_body.clone())?;
@@ -74,7 +71,7 @@ impl Interpreter {
                 self.functions.insert(name.clone(), (params.clone(), body.clone()));
             }
             ASTNode::FunctionCall(name, args) => {
-                // ここで self.functions.get(name) の borrow を回避するため、clone する
+                // 関数呼び出し
                 let (params, body) = self.functions.get(name)
                     .cloned()
                     .ok_or_else(|| Error::Runtime(format!("Function {} not found", name)))?;
@@ -86,13 +83,12 @@ impl Interpreter {
                         args.len()
                     )));
                 }
-                // 新しいローカルスコープを作成
+                // ローカルスコープを作成して引数を評価
                 let mut local_scope = Scope::new(Some(self.scope.clone()));
                 for (param, arg) in params.iter().zip(args.iter()) {
                     let value = self.evaluate_expression(arg)?;
                     local_scope.set(param.clone(), value);
                 }
-                // 現在のスコープを退避して、ローカルスコープで関数本体を実行
                 let previous_scope = self.scope.clone();
                 self.scope = local_scope;
                 self.interpret(body.clone())?;
@@ -102,24 +98,24 @@ impl Interpreter {
                 println!("Exiting program.");
                 std::process::exit(0);
             }
+            // まだ未実装のバリアントはエラーにする
             _ => return Err(Error::Runtime(format!("Unexpected statement: {:?}", stmt))),
         }
         Ok(())
     }
 
-    /// 式を評価する。Expr 型を受け取り、Value を返す
+    /// 式 (Expr) を評価して Value を返す
     fn evaluate_expression(&mut self, expr: &Expr) -> Result<Value> {
         match expr {
             Expr::Literal(value) => Ok(value.clone()),
             Expr::Variable(name) => {
-                self.scope
-                    .get(name)
+                self.scope.get(name)
                     .ok_or_else(|| Error::Runtime(format!("Undefined variable: {}", name)))
             }
             Expr::BinaryOp(left, op, right) => {
                 let left_value = self.evaluate_expression(left)?;
                 let right_value = self.evaluate_expression(right)?;
-                // borrowエラー回避のため、cloneしてエラーメッセージに使用
+                // 値の所有権の問題を避けるため、必要に応じて clone する
                 match (left_value.clone(), right_value.clone(), op.as_str()) {
                     (Value::Number(l), Value::Number(r), "+") => Ok(Value::Number(l + r)),
                     (Value::Number(l), Value::Number(r), "-") => Ok(Value::Number(l - r)),
@@ -155,6 +151,7 @@ impl Interpreter {
                 }
             }
             Expr::FunctionCall(_name, _args) => {
+                // 式内の関数呼び出しはここでは未実装（または後で実装する）
                 Err(Error::Runtime("Function calls in expressions not supported".into()))
             }
         }
