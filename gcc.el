@@ -6,7 +6,7 @@ function(name=add,a,b){
 	i = a + b
 	return i
 }
-file.open(c://file,dom=.txt){
+file.open(c://file,dom=elium.txt){
 	parm1 = input("please type me")
 	parm2 = input("please type me")
 	add(parm1,parm2,return=i)
